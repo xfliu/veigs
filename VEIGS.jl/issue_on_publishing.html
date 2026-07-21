@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Veigs.jl — open questions on publishing (Q-001, Q-002)</title>
+<style>
+  body {
+    font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+    max-width: 820px;
+    margin: 2em auto;
+    padding: 0 1em;
+    color: #222;
+    line-height: 1.55;
+  }
+  h1 { border-bottom: 2px solid #333; padding-bottom: 0.2em; }
+  h2 { margin-top: 2em; border-bottom: 1px solid #ccc; padding-bottom: 0.1em; }
+  h3 { margin-top: 1.4em; }
+  code, pre {
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    background: #f4f4f4;
+    border-radius: 3px;
+  }
+  code { padding: 0.1em 0.3em; }
+  pre {
+    padding: 0.6em 0.9em;
+    overflow-x: auto;
+    border-left: 3px solid #888;
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 1em 0;
+  }
+  th, td {
+    border: 1px solid #ccc;
+    padding: 0.5em 0.7em;
+    text-align: left;
+    vertical-align: top;
+  }
+  th { background: #eee; }
+  .recommend {
+    background: #eaf3ea;
+    border-left: 4px solid #4a8c4a;
+    padding: 0.7em 1em;
+    margin: 1em 0;
+  }
+  .warn {
+    background: #fdf3e7;
+    border-left: 4px solid #d68f3a;
+    padding: 0.7em 1em;
+    margin: 1em 0;
+  }
+  .meta {
+    color: #666;
+    font-size: 0.9em;
+  }
+  ol li, ul li { margin-bottom: 0.3em; }
+</style>
+</head>
+<body>
+
+<h1>Veigs.jl — open questions on publishing</h1>
+<p class="meta">
+  Status as of 2026-05-01. Iters 1–7 are 🟢 (723 tests passing).
+  Iter 8 (docs + CI + sparse path) and the questions below are the remaining
+  decision points before a public release.
+</p>
+
+<h2>Current state of the repository</h2>
+<ul>
+  <li>The MATLAB tree <code>veigs/</code> ships an MIT License,
+      <em>Copyright (c) 2025 Xuefeng Liu, Yuuka Yanagisawa</em>.</li>
+  <li>The Julia tree <code>Veigs.jl/</code> has <strong>no LICENSE file</strong>
+      and is <strong>not yet a git repository</strong>.</li>
+  <li><code>Project.toml</code> lists <code>authors = ["Xuefeng Liu", "Yuuka Yanagisawa"]</code>
+      but has no <code>license</code> field, no <code>repo</code> URL.</li>
+  <li>Package version is <code>0.1.0-dev</code>.</li>
+</ul>
+
+<div class="warn">
+  <strong>Why these questions matter now.</strong> Julia treats source code with
+  no LICENSE as <em>all rights reserved</em> by default. Even kept private,
+  the package needs an explicit license so you (or a co-author) can later
+  re-distribute it cleanly. Registration is a separate, larger commitment
+  but inherits whatever license you pick now.
+</div>
+
+<h2>Q-002 — License</h2>
+
+<h3>Three sensible options</h3>
+<table>
+  <tr>
+    <th>Option</th><th>What it says</th><th>When to pick</th>
+  </tr>
+  <tr>
+    <td><strong>A. Copy MIT verbatim</strong> from <code>veigs/LICENSE</code>
+        (the DECISIONS.md default)</td>
+    <td>Same MIT terms; same copyright notice <em>"2025 Xuefeng Liu, Yuuka Yanagisawa"</em></td>
+    <td>You consider the Julia port a translation of the MATLAB toolbox under
+        the same authorship and same terms. Cleanest legally — makes the
+        lineage explicit.</td>
+  </tr>
+  <tr>
+    <td><strong>B. Fresh MIT, same authors, year 2026</strong></td>
+    <td><em>"Copyright (c) 2026 Xuefeng Liu, Yuuka Yanagisawa"</em> — separate
+        notice for the Julia port</td>
+    <td>You consider the Julia code a <em>new work</em> (not a strict
+        derivative), so a 2026 notice is more accurate. Both files end up
+        under MIT either way.</td>
+  </tr>
+  <tr>
+    <td><strong>C. Dual-list both</strong></td>
+    <td>One LICENSE with both notices (2025 MATLAB + 2026 Julia), explicitly
+        "MIT, derived from veigs/"</td>
+    <td>Maximum provenance clarity. Slightly verbose. Safe if you ever
+        upstream changes back to the MATLAB version.</td>
+  </tr>
+</table>
+
+<div class="recommend">
+  <strong>Recommendation: Option B.</strong> The Julia port is genuinely new
+  code — new bugs, new test infrastructure, a different design surface
+  (<code>verified_ldl</code>, error hierarchy, etc.) — even though it's a
+  faithful algorithmic port. A 2026 notice on the Julia tree, keeping the
+  MIT terms, accurately reflects this. If you later want extra-explicit
+  lineage, add a one-line
+  <em>"Derived from the MATLAB veigs toolbox (MIT, 2025)."</em>
+  to the README — lighter than a dual-licensed LICENSE file.
+</div>
+
+<h3>What to add</h3>
+<p><code>Veigs.jl/LICENSE</code>, contents:</p>
+<pre>MIT License
+
+Copyright (c) 2026 Xuefeng Liu, Yuuka Yanagisawa
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.</pre>
+
+<p>And add to <code>Project.toml</code> so registry tools and <code>Pkg</code>
+   pick up the SPDX identifier:</p>
+<pre>license = "MIT"</pre>
+
+<h2>Q-001 — Register on JuliaRegistries?</h2>
+
+<p>The Julia <strong>General registry</strong> is the public Julia package
+   registry. Once a package is registered there, anyone can run
+   <code>Pkg.add("Veigs")</code> and get it via the version resolver.
+   Registration is one-way easy, multi-way hard: you cannot truly
+   <em>unregister</em> a name once published — you can only stop releasing
+   new versions.</p>
+
+<h3>Part 1 — Is the package ready for General today?</h3>
+<p>Not quite. Three blockers:</p>
+<ol>
+  <li><strong>No public GitHub URL.</strong> The package is in a Dropbox
+      folder, not in a git repo. Registration requires a public Git URL.</li>
+  <li><strong>No CI.</strong> The General-registry policy doesn't strictly
+      <em>require</em> CI, but unmaintained packages without it get flagged
+      in practice. Iter 8's <code>.github/workflows/ci.yml</code> should
+      land first.</li>
+  <li><strong>Package version is <code>0.1.0-dev</code>.</strong> The registry
+      rejects <code>-dev</code> suffixes — you'd bump to <code>0.1.0</code>
+      for a real release.</li>
+</ol>
+
+<h3>Part 2 — Even when ready, should you publish?</h3>
+<table>
+  <tr>
+    <th>Pro</th><th>Con</th>
+  </tr>
+  <tr>
+    <td>Citation: a registered package can get a DOI via Zenodo; useful for
+        academic papers.</td>
+    <td>The name <code>Veigs.jl</code> on General is permanent — can't change
+        later.</td>
+  </tr>
+  <tr>
+    <td>Discoverability: <code>JuliaHub</code>, search engines, recommendation
+        lists.</td>
+    <td>Maintenance commitment: bug reports, version bumps for compat,
+        deprecation churn from <code>IntervalArithmetic.jl</code>, etc.</td>
+  </tr>
+  <tr>
+    <td>Easier collaboration: anyone can <code>Pkg.add</code> and reproduce
+        results.</td>
+    <td>If the package is tied to one paper's reproducibility, you may want
+        it <em>pinned</em>, not iterating.</td>
+  </tr>
+</table>
+
+<h3>Part 3 — Lower-stakes alternatives</h3>
+<p>You don't need General-registry publication to get most of the benefits.
+   Three lower-stakes paths:</p>
+<ol>
+  <li><strong>Public GitHub repo, no registration.</strong> Users do
+      <code>Pkg.add(url="https://github.com/.../Veigs.jl")</code>. They can
+      pin to a specific commit. Zero ongoing obligation; still cite-able via
+      the GitHub URL or a Zenodo DOI.</li>
+  <li><strong>Private (or personal) Julia registry.</strong> A YAML file you
+      publish on GitHub that declares Veigs.jl. Users add your registry
+      first, then <code>Pkg.add("Veigs")</code>. Useful inside a research
+      group.</li>
+  <li><strong>Stay path-only.</strong> Users
+      <code>Pkg.develop(path="…")</code>. Best for closed collaboration
+      only.</li>
+</ol>
+
+<div class="recommend">
+  <strong>Recommendation, in order:</strong>
+  <ol>
+    <li><strong>Now (before iter 8):</strong> initialize git, add LICENSE
+        (Option B), push to a <em>private</em> GitHub repo. Costs nothing,
+        fixes Q-002, makes future Q-001 easy.</li>
+    <li><strong>At iter 8:</strong> land CI yaml, bump to <code>0.1.0</code>,
+        make the GitHub repo public if you're comfortable. Most users can
+        already use the package via <code>Pkg.add(url=...)</code> at this
+        point — you don't yet need the General registry.</li>
+    <li><strong>Only after a paper or talk references the package:</strong>
+        register on General. By then you have a stable v0.1, real users, and
+        a clear reason. Until then, <em>public-but-unregistered</em> is the
+        best risk/reward trade-off.</li>
+  </ol>
+</div>
+
+<h2>Summary table</h2>
+<table>
+  <tr>
+    <th>Question</th><th>Recommendation</th><th>Action now?</th>
+  </tr>
+  <tr>
+    <td>Q-002 — License</td>
+    <td>Option B: fresh MIT, copyright 2026, same authors</td>
+    <td><strong>Yes</strong> — add <code>LICENSE</code> file and
+        <code>license = "MIT"</code> in Project.toml</td>
+  </tr>
+  <tr>
+    <td>Q-001 — Register on JuliaRegistries</td>
+    <td>Defer. Use a public GitHub repo first; register only after a paper
+        cites the package</td>
+    <td><strong>No, just</strong> <code>git init</code> and push to GitHub
+        (private OK)</td>
+  </tr>
+</table>
+
+<p class="meta">
+  Once you decide, the corresponding entries in <code>DECISIONS.md</code>
+  (lines 121–127, "Open questions for you") can be checked off and the
+  <code>[PENDING-CONFIRM]</code> tags removed from D-001 (UUID + name) and
+  any related decisions.
+</p>
+
+</body>
+</html>
