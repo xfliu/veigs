@@ -134,4 +134,33 @@ Random.seed!(20260501)
         @test t2 < 0.10
     end
 
+
+    @testset "14. Rump 2006 shift: directed rounding and the γ/(1-γ) factor" begin
+        # The roundoff factor must be γ_{n+1}/(1-γ_{n+1}) = (n+1)u/(1-2(n+1)u),
+        # strictly larger than γ_{n+1} alone.
+        n = 1000
+        u = eps(Float64) / 2
+        k = big(n + 1) * big(u)
+        exact = k / (1 - 2k)
+        kn = interval(Float64(n + 1)) * interval(u)
+        γ = kn / (interval(1.0) - kn)
+        @test big(sup(γ / (interval(1.0) - γ))) >= exact
+        @test big(sup(γ)) < exact
+
+        # Upward-rounded sums of nonnegative terms bound the exact sum.
+        xs = fill(0.1, 10_000)
+        @test big(Veigs._nonneg_sum_up(sum(xs), length(xs))) >= sum(big.(xs))
+        @test Veigs._sub_down(1.0, 0.1) <= big(1.0) - big(0.1)
+
+        # Dense and sparse paths agree, also with an asymmetric midpoint.
+        A = Matrix(spd_random(40))
+        @test verified_isspd(A; method = :rump2006)
+        @test verified_isspd(sparse(A); method = :rump2006)
+        B = copy(A); B[1, 2] = nextfloat(B[1, 2])
+        @test verified_isspd(B; method = :rump2006)
+        @test verified_isspd(sparse(B); method = :rump2006)
+        @test Veigs._symmetrization_error_up(B, (B + B') / 2) > 0
+        @test Veigs._symmetrization_error_up(A, (A + A') / 2) == 0
+    end
+
 end

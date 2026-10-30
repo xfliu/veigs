@@ -139,12 +139,11 @@ function _verified_isspd_ldl_shift(M::AbstractMatrix)
         # residuals ‖E‖₂ ≤ ‖E‖_∞, but ΔA itself may not be symmetric due
         # to interval-arithmetic conservatism, so use the safe geometric mean.
         absΔ = mag.(ΔA)
-        nrm1 = maximum(sum(absΔ; dims = 1))
-        nrmi = maximum(sum(absΔ; dims = 2))
+        nrm1, nrmi = _nonneg_norms_up(absΔ)   # sums rounded upward
         if !(isfinite(nrm1) && isfinite(nrmi))
             return false                      # interval blow-up
         end
-        Ebnd = nextfloat(sqrt(nrm1 * nrmi))   # tiny upward bump dominates fp error
+        Ebnd = _sqrt_prod_up(nrm1, nrmi)
 
         if Ebnd < ρ
             return true                       # λ_min(M) ≥ ρ − Ebnd > 0
@@ -160,6 +159,35 @@ function _verified_isspd_ldl_shift(M::AbstractMatrix)
 end
 
 # ----------------------------------------------------------------------------
+# Directed-rounding helpers.  Scalar interval operations give outward
+# rounding without changing the global rounding mode.
+# ----------------------------------------------------------------------------
+
+_add_up(a::Float64, b::Float64) = sup(interval(a) + interval(b))
+_sub_down(a::Float64, b::Float64) = inf(interval(a) - interval(b))
+_sqrt_prod_up(a::Float64, b::Float64) = sup(sqrt(interval(a) * interval(b)))
+
+# Upper bound for the exact sum of `nterms` nonnegative numbers whose
+# floating-point sum, in any order, is `s`.  The rounding error of any
+# summation order is at most γ_{n-1} times the sum of the absolute values,
+# so for nonnegative terms s_exact ≤ s / (1 - γ_{n-1}).
+function _nonneg_sum_up(s::Float64, nterms::Int)
+    isfinite(s) || return Inf
+    nterms <= 1 && return s
+    k = interval(Float64(nterms - 1)) * interval(eps(Float64) / 2)
+    sup(k) < 0.5 || return Inf
+    γ = k / (interval(1.0) - k)
+    return sup(interval(s) / (interval(1.0) - γ))
+end
+
+# Upper bounds for the 1-norm and ∞-norm of a nonnegative matrix R.
+function _nonneg_norms_up(R::AbstractMatrix)
+    r1   = _nonneg_sum_up(Float64(maximum(sum(R; dims = 1))), size(R, 1))
+    rinf = _nonneg_sum_up(Float64(maximum(sum(R; dims = 2))), size(R, 2))
+    return r1, rinf
+end
+
+# ----------------------------------------------------------------------------
 # Rump 2006 — single-Cholesky verified PD test.
 #
 # Reference: S. M. Rump, "Verification of positive definiteness," BIT
@@ -169,9 +197,11 @@ end
 # Algorithm:
 #   1. c := γ_{n+1}/(1 − γ_{n+1}) · tr(|A_mid|) + n·M·eta,
 #      where M := 3·(2n + max|a_νν|), eta = smallest subnormal,
-#      γ_k := k·u/(1 − k·u), u = eps/2.
+#      γ_k := k·u/(1 − k·u), u = eps/2.  Note γ_{n+1}/(1 − γ_{n+1}) =
+#      (n+1)u/(1 − 2(n+1)u); every quantity is rounded upward.
 #   2. r := ‖radius(M)‖₂  (≤ √(‖R‖₁·‖R‖_∞), Perron-bound).
-#   3. shift := c + r ; form Ã := A_mid − shift·I.
+#   3. shift := c + r ; form Ã := A_mid − shift·I with the diagonal
+#      rounded downward, as Theorem 2.3 requires.
 #   4. Run a single floating-point Cholesky of Ã.
 #      If it runs to completion ⇒ every concrete matrix in the interval
 #      enclosure of M is SPD.
@@ -228,16 +258,24 @@ function _verified_isspd_rump2006_midrad(Mm::AbstractMatrix,
                                          n::Int)
     # Defensive symmetrization on the midpoint (mirror v3's convention).
     # Done out-of-place to keep `Mm` writable for the diagonal shift below.
-    Mm = if Mm isa AbstractSparseMatrix
+    # Every symmetric matrix in the enclosure has midpoint (Mm + Mm')/2 in
+    # exact arithmetic.  Its floating-point evaluation is exact where Mm is
+    # symmetric; elsewhere the rounding error is at most eps(|entry|) and is
+    # added to the radius bound below.
+    Msym = if Mm isa AbstractSparseMatrix
         sparse(Symmetric((Mm + Mm') / 2))
     else
         (Mm + Mm') / 2
     end
+    sym_err = _symmetrization_error_up(Mm, Msym)
+    isfinite(sym_err) || return false
+    Mm = Msym
 
-    u    = eps(Float64) / 2
-    γnp1 = (n + 1) * u
-    γnp1 < 1.0 || return false
-    γfac = γnp1 / (1 - γnp1)
+    # γ_{n+1}/(1 − γ_{n+1}) with γ_k = k·u/(1 − k·u), rounded upward.
+    kn = interval(Float64(n + 1)) * interval(eps(Float64) / 2)
+    sup(kn) < 0.5 || return false
+    γnp1 = kn / (interval(1.0) - kn)
+    γfac = γnp1 / (interval(1.0) - γnp1)
 
     # Largest |diagonal| sets both `tr_abs` (for c) and `M_const`.
     a_max = 0.0
@@ -249,26 +287,26 @@ function _verified_isspd_rump2006_midrad(Mm::AbstractMatrix,
             a_max = ai
         end
     end
-    M_const = 3 * (2 * n + a_max)
-    eta     = nextfloat(0.0)                 # smallest subnormal, IEEE 754
-    c_round = γfac * tr_abs + n * M_const * eta
-    c_round = nextfloat(c_round)             # safety upward bump
+    eta     = interval(nextfloat(0.0))       # smallest subnormal, IEEE 754
+    M_const = interval(3.0) * (interval(2.0) * interval(Float64(n)) + interval(a_max))
+    tr_up   = _nonneg_sum_up(tr_abs, n)      # the trace sum, rounded upward
+    isfinite(tr_up) || return false
+    c_round = sup(γfac * interval(tr_up) + interval(Float64(n)) * M_const * eta)
 
     # Interval-radius bound: r ≥ ρ(R) ≤ √(‖R‖₁·‖R‖_∞).
     r_int = if Mr === nothing
         0.0                         # exact float input, radius identically zero
     elseif Mr isa Tuple
-        r1, rinf = Mr               # caller-supplied scalar p-norm bounds
+        r1, rinf = Mr               # caller-supplied upper bounds of the p-norms
         (isfinite(r1) && isfinite(rinf)) || return false
-        nextfloat(sqrt(r1 * rinf))
+        _sqrt_prod_up(Float64(r1), Float64(rinf))
     else
-        r1   = maximum(sum(Mr; dims = 1))
-        rinf = maximum(sum(Mr; dims = 2))
+        r1, rinf = _nonneg_norms_up(Mr)
         (isfinite(r1) && isfinite(rinf)) || return false
-        nextfloat(sqrt(r1 * rinf))
+        _sqrt_prod_up(r1, rinf)
     end
 
-    shift = c_round + r_int
+    shift = _add_up(_add_up(c_round, r_int), sym_err)
     isfinite(shift) || return false
 
     # Tridiagonal fast path. For an n×n symmetric tridiagonal SPD matrix,
@@ -285,7 +323,10 @@ function _verified_isspd_rump2006_midrad(Mm::AbstractMatrix,
     if Mm isa AbstractSparseMatrix
         # Densify a copy of the diagonal entries, ensuring all n diagonal
         # slots exist in the sparse pattern (`spdiagm` materialises them).
-        Atilde = Mm - shift * sparse(I, n, n)
+        # Replace the diagonal by fl↓(a_ii − shift).  Removing the old
+        # diagonal and adding the new one is exact.
+        dg = Vector{Float64}(diag(Mm))
+        Atilde = Mm - spdiagm(0 => dg) + spdiagm(0 => _sub_down.(dg, shift))
         F = cholesky(Symmetric(Atilde, :L); check = false)
         # SuiteSparse Cholesky on a non-PD input throws PosDefException
         # only with `check=true`; with `check=false` it returns a factor
@@ -294,7 +335,7 @@ function _verified_isspd_rump2006_midrad(Mm::AbstractMatrix,
     else
         Atilde = copy(Mm)
         @inbounds for i in 1:n
-            Atilde[i, i] -= shift
+            Atilde[i, i] = _sub_down(Atilde[i, i], shift)
         end
         F = cholesky!(Symmetric(Atilde, :L); check = false)
         return F.info == 0
@@ -307,7 +348,7 @@ end
 function _rump2006_certify_tridiag(Mm::AbstractMatrix, shift::Float64, n::Int)
     dv = Vector{Float64}(undef, n)
     @inbounds for i in 1:n
-        dv[i] = Float64(Mm[i, i]) - shift
+        dv[i] = _sub_down(Float64(Mm[i, i]), shift)
     end
     ev = Vector{Float64}(undef, max(n - 1, 0))
     @inbounds for i in 1:(n - 1)
@@ -324,4 +365,31 @@ function _rump2006_certify_tridiag(Mm::AbstractMatrix, shift::Float64, n::Int)
         (isfinite(d) && d > 0.0) || return false
     end
     return true
+end
+
+# Upper bound for the 2-norm of fl((Mm + Mm')/2) − (Mm + Mm')/2.  The error
+# matrix is symmetric, so its 2-norm is at most its ∞-norm.  Each rounded
+# entry is in error by at most eps(|entry|); exact entries contribute 0.
+# In the sparse branch an entry may be counted twice, which only enlarges
+# the bound.
+function _symmetrization_error_up(Mm::AbstractMatrix, Msym::AbstractMatrix)
+    n = size(Mm, 1)
+    rows = zeros(Float64, n)
+    if Mm isa AbstractSparseMatrix
+        I_, J_, V_ = findnz(sparse(Mm))
+        for k in eachindex(V_)
+            i, j = I_[k], J_[k]
+            V_[k] == Mm[j, i] && continue
+            e = eps(abs(Float64(Msym[i, j])))
+            rows[i] += e
+            rows[j] += e
+        end
+    else
+        @inbounds for j in 1:n, i in 1:n
+            Mm[i, j] == Mm[j, i] && continue
+            rows[i] += eps(abs(Float64(Msym[i, j])))
+        end
+    end
+    any(!iszero, rows) || return 0.0
+    return _nonneg_sum_up(maximum(rows), n)
 end
